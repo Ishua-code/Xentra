@@ -1,0 +1,63 @@
+from fastapi import FastAPI
+from app.core.config import settings
+from app.services.epss_service import EPSSService
+from app.models.identity import Identity
+from app.services.identity_service import IdentityService
+from app.services.graph_service import GraphRiskService
+from app.models.vulnerability import Vulnerability
+from app.services.correlation_service import CorrelationService
+from pydantic import BaseModel
+
+
+
+app = FastAPI(
+    title=settings.app_name,
+    description="Threat Identity Fusion System — fuses vulnerability exploitability with identity risk.",
+    version="0.1.0"
+)
+
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok", "service": "xentra-api", "environment": settings.app_env}
+
+
+@app.get("/")
+def root():
+    return {"message": f"{settings.app_name} API is running"}
+
+epss_service = EPSSService()
+
+
+@app.get("/api/v1/epss/{cve_id}")
+async def get_epss_score(cve_id: str):
+    score = await epss_service.get_score(cve_id)
+    return {"cve_id": cve_id, "epss_score": score}
+
+
+identity_service = IdentityService()
+
+
+@app.post("/api/v1/identity/score")
+def score_identity(identity: Identity):
+    score = identity_service.calculate_score(identity)
+    return {"username": identity.username, "identity_exposure_score": score}
+
+graph_service = GraphRiskService()
+
+
+@app.post("/api/v1/graph/analyze")
+def analyze_graph(identities: list[Identity]):
+    return graph_service.analyze(identities)
+
+correlation_service = CorrelationService()
+
+
+class CorrelationRequest(BaseModel):
+    vulnerabilities: list[Vulnerability]
+    identities: list[Identity]
+
+
+@app.post("/api/v1/correlate")
+async def correlate(request: CorrelationRequest):
+    return await correlation_service.correlate(request.vulnerabilities, request.identities)
