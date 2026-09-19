@@ -3,6 +3,8 @@ from app.core.config import settings
 from app.services.epss_service import EPSSService
 from app.models.identity import Identity
 from app.services.identity_service import IdentityService
+from app.services.graph_service import GraphRiskService
+
 
 app = FastAPI(
     title=settings.app_name,
@@ -36,3 +38,10 @@ identity_service = IdentityService()
 def score_identity(identity: Identity):
     score = identity_service.calculate_score(identity)
     return {"username": identity.username, "identity_exposure_score": score}
+
+graph_service = GraphRiskService()
+
+
+@app.post("/api/v1/graph/analyze")
+def analyze_graph(identities: list[Identity]):
+    return graph_service.analyze(identities)
