@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from app.core.config import settings
 from app.services.epss_service import EPSSService
+from app.models.identity import Identity
+from app.services.identity_service import IdentityService
 
 app = FastAPI(
     title=settings.app_name,
@@ -25,3 +27,12 @@ epss_service = EPSSService()
 async def get_epss_score(cve_id: str):
     score = await epss_service.get_score(cve_id)
     return {"cve_id": cve_id, "epss_score": score}
+
+
+identity_service = IdentityService()
+
+
+@app.post("/api/v1/identity/score")
+def score_identity(identity: Identity):
+    score = identity_service.calculate_score(identity)
+    return {"username": identity.username, "identity_exposure_score": score}
