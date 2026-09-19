@@ -4,6 +4,10 @@ from app.services.epss_service import EPSSService
 from app.models.identity import Identity
 from app.services.identity_service import IdentityService
 from app.services.graph_service import GraphRiskService
+from app.models.vulnerability import Vulnerability
+from app.services.correlation_service import CorrelationService
+from pydantic import BaseModel
+
 
 
 app = FastAPI(
@@ -45,3 +49,15 @@ graph_service = GraphRiskService()
 @app.post("/api/v1/graph/analyze")
 def analyze_graph(identities: list[Identity]):
     return graph_service.analyze(identities)
+
+correlation_service = CorrelationService()
+
+
+class CorrelationRequest(BaseModel):
+    vulnerabilities: list[Vulnerability]
+    identities: list[Identity]
+
+
+@app.post("/api/v1/correlate")
+async def correlate(request: CorrelationRequest):
+    return await correlation_service.correlate(request.vulnerabilities, request.identities)
