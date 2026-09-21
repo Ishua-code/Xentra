@@ -4,6 +4,7 @@ from app.services.epss_service import EPSSService
 from app.models.identity import Identity
 from app.services.identity_service import IdentityService
 from app.services.graph_service import GraphRiskService
+from app.services.ticket_service import TicketService
 
 
 app = FastAPI(
@@ -45,3 +46,11 @@ graph_service = GraphRiskService()
 @app.post("/api/v1/graph/analyze")
 def analyze_graph(identities: list[Identity]):
     return graph_service.analyze(identities)
+
+ticket_service = TicketService()
+
+@app.post("/api/v1/correlate")
+async def correlate(request: CorrelationRequest):
+    findings = await correlation_service.correlate(request.vulnerabilities, request.identities)
+    tickets = ticket_service.generate_tickets(findings)
+    return {"findings": findings, "tickets": tickets}
