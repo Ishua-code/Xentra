@@ -1,4 +1,4 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -9,8 +9,14 @@ class Settings(BaseSettings):
     epss_api_url: str = "https://api.first.org/data/v1/epss"
     epss_request_timeout: int = 10
 
-    class Config:
-        env_file = ".env"
+    risk_threshold_critical: float = 0.8
+    risk_threshold_high: float = 0.5
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 settings = Settings()
