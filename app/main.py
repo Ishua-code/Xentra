@@ -5,7 +5,9 @@ from app.models.identity import Identity
 from app.services.identity_service import IdentityService
 from app.services.graph_service import GraphRiskService
 from app.services.ticket_service import TicketService
-
+from pydantic import BaseModel
+from app.models.vulnerability import Vulnerability
+from app.services.correlation_service import CorrelationService
 
 app = FastAPI(
     title=settings.app_name,
@@ -48,6 +50,12 @@ def analyze_graph(identities: list[Identity]):
     return graph_service.analyze(identities)
 
 ticket_service = TicketService()
+class CorrelationRequest(BaseModel):
+    vulnerabilities: list[Vulnerability]
+    identities: list[Identity]
+
+
+correlation_service = CorrelationService()
 
 @app.post("/api/v1/correlate")
 async def correlate(request: CorrelationRequest):
