@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     app_name: str = "XENTRA"
     app_env: str = "development"
     api_v1_prefix: str = "/api/v1"
+    database_url: str = "postgresql+asyncpg://xentra:xentra@localhost:5432/xentra"
 
     epss_api_url: str = "https://api.first.org/data/v1/epss"
     epss_request_timeout: int = 10
