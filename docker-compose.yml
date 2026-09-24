@@ -1,0 +1,17 @@
+services:
+  api:
+    build: .
+    container_name: xentra-api
+    ports:
+      - "8000:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      APP_ENV: docker
+    restart: unless-stopped
+
+  # Day 4: PostgreSQL goes here
+  # db:
+  #   image: postgres:17
+  
