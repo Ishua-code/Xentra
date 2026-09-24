@@ -1,4 +1,21 @@
 services:
+  db:
+    image: postgres:17
+    container_name: xentra-db
+    environment:
+      POSTGRES_USER: xentra
+      POSTGRES_PASSWORD: xentra
+      POSTGRES_DB: xentra
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U xentra -d xentra"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   api:
     build: .
     container_name: xentra-api
@@ -9,9 +26,11 @@ services:
         required: false
     environment:
       APP_ENV: docker
+      DATABASE_URL: postgresql+asyncpg://xentra:xentra@db:5432/xentra
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
 
-  # Day 4: PostgreSQL goes here
-  # db:
-  #   image: postgres:17
-  
+volumes:
+  pgdata:

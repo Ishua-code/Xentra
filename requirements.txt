@@ -28,3 +28,10 @@ typing_extensions==4.16.0
 uvicorn==0.53.0
 pytest-cov==7.1.0
 coverage==7.16.1
+aiosqlite==0.22.1
+alembic==1.20.0
+asyncpg==0.31.0
+greenlet==3.5.6
+Mako==1.4.3
+MarkupSafe==3.0.3
+SQLAlchemy==2.0.54
