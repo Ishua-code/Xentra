@@ -118,3 +118,37 @@ def test_correlate_sorts_findings_by_unified_risk_score_descending():
     tickets = response.json()["tickets"]
     assert len(tickets) == 1
     assert tickets[0]["cve_id"] == "CVE-B"
+
+@respx.mock
+def test_correlate_persists_ticket_to_database():
+    respx.get("https://api.first.org/data/v1/epss").mock(
+        return_value=Response(200, json={"data": [{"epss": "0.97"}]})
+    )
+
+    identity = make_identity(
+        "admin_persist", PrivilegeLevel.domain_admin, False, 2, "192.168.1.50"
+    )
+    payload = {
+        "vulnerabilities": [
+            {"cve_id": "CVE-2021-44228", "host": "192.168.1.50", "cvss_score": 10.0}
+        ],
+        "identities": [identity.model_dump(mode="json")],
+    }
+
+    response = client.post("/api/v1/correlate", json=payload)
+    assert response.status_code == 200
+    returned = response.json()["tickets"]
+    assert len(returned) == 1
+    ticket_id = returned[0]["ticket_id"]
+
+    # Fetched via a fresh request/session, so it must have been committed
+    fetched = client.get(f"/api/v1/tickets/{ticket_id}")
+    assert fetched.status_code == 200
+    body = fetched.json()
+    assert body["cve_id"] == "CVE-2021-44228"
+    assert body["owner"] == "admin_persist"
+    assert body["host"] == "192.168.1.50"
+
+    listed = client.get("/api/v1/tickets", params={"owner": "admin_persist"})
+    assert listed.status_code == 200
+    assert ticket_id in [t["ticket_id"] for t in listed.json()]

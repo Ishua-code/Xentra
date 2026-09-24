@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.tickets import router as tickets_router
 from app.db.repository import TicketRepository
 from app.db.session import get_session
+from app.db.repository import FindingRepository, IdentityRepository, TicketRepository
 
 app = FastAPI(
     title=settings.app_name,
@@ -70,5 +71,9 @@ async def correlate(
 ):
     findings = await correlation_service.correlate(request.vulnerabilities, request.identities)
     tickets = ticket_service.generate_tickets(findings)
+
+    await IdentityRepository(session).upsert_many(request.identities)
+    await FindingRepository(session).save_many(findings)
     await TicketRepository(session).save_many(tickets)
+
     return {"findings": findings, "tickets": tickets}
