@@ -9,6 +9,12 @@ class Severity(str, Enum):
     high = "High"
     medium = "Medium"
 
+class TicketStatus(str, Enum):
+    open = "Open"
+    in_progress = "In Progress"
+    resolved = "Resolved"
+    closed = "Closed"
+
 
 class Ticket(BaseModel):
     ticket_id: str

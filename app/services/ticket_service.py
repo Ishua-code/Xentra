@@ -2,7 +2,7 @@ from datetime import datetime
 from app.models.finding import UnifiedFinding
 from app.models.ticket import Ticket, Severity
 from app.core.config import settings
-
+from uuid import uuid4
 
 class TicketService:
     """
@@ -35,7 +35,7 @@ class TicketService:
 
             severity = self._get_severity(finding.unified_risk_score)
             ticket = Ticket(
-                ticket_id=f"XENTRA-{datetime.now().strftime('%Y%m%d%H%M%S')}-{i+1}",
+                ticket_id=f"XENTRA-{datetime.now().strftime('%Y%m%d%H%M%S')}-{i+1}-{uuid4().hex[:6]}",
                 title=f"{severity.value} Risk: {finding.cve_id} on account '{finding.owner}'",
                 severity=severity,
                 cve_id=finding.cve_id,

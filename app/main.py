@@ -8,12 +8,18 @@ from app.services.ticket_service import TicketService
 from pydantic import BaseModel
 from app.models.vulnerability import Vulnerability
 from app.services.correlation_service import CorrelationService
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.api.tickets import router as tickets_router
+from app.db.repository import TicketRepository
+from app.db.session import get_session
 
 app = FastAPI(
     title=settings.app_name,
     description="Threat Identity Fusion System — fuses vulnerability exploitability with identity risk.",
     version="0.1.0"
 )
+app.include_router(tickets_router)
 
 
 @app.get("/health")
@@ -58,7 +64,11 @@ class CorrelationRequest(BaseModel):
 correlation_service = CorrelationService()
 
 @app.post("/api/v1/correlate")
-async def correlate(request: CorrelationRequest):
+async def correlate(
+    request: CorrelationRequest,
+    session: AsyncSession = Depends(get_session),
+):
     findings = await correlation_service.correlate(request.vulnerabilities, request.identities)
     tickets = ticket_service.generate_tickets(findings)
+    await TicketRepository(session).save_many(tickets)
     return {"findings": findings, "tickets": tickets}
