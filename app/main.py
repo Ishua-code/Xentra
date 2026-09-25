@@ -14,6 +14,8 @@ from app.api.tickets import router as tickets_router
 from app.db.repository import TicketRepository
 from app.db.session import get_session
 from app.db.repository import FindingRepository, IdentityRepository, TicketRepository
+from app.api.findings import router as findings_router
+from app.api.identities import router as identities_router
 
 app = FastAPI(
     title=settings.app_name,
@@ -21,6 +23,8 @@ app = FastAPI(
     version="0.1.0"
 )
 app.include_router(tickets_router)
+app.include_router(findings_router)
+app.include_router(identities_router)
 
 
 @app.get("/health")
