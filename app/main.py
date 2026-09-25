@@ -16,6 +16,8 @@ from app.db.session import get_session
 from app.db.repository import FindingRepository, IdentityRepository, TicketRepository
 from app.api.findings import router as findings_router
 from app.api.identities import router as identities_router
+from app.api.auth import router as auth_router
+from app.core.security import get_current_user
 
 app = FastAPI(
     title=settings.app_name,
@@ -25,6 +27,7 @@ app = FastAPI(
 app.include_router(tickets_router)
 app.include_router(findings_router)
 app.include_router(identities_router)
+app.include_router(auth_router)
 
 
 @app.get("/health")
@@ -72,6 +75,7 @@ correlation_service = CorrelationService()
 async def correlate(
     request: CorrelationRequest,
     session: AsyncSession = Depends(get_session),
+    current_user: str = Depends(get_current_user),
 ):
     findings = await correlation_service.correlate(request.vulnerabilities, request.identities)
     tickets = ticket_service.generate_tickets(findings)

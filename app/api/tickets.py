@@ -5,8 +5,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.repository import TicketRepository
 from app.db.session import get_session
 from app.models.ticket import Severity, Ticket, TicketStatus
+from app.core.security import get_current_user
 
-router = APIRouter(prefix="/api/v1/tickets", tags=["tickets"])
+router = APIRouter(
+    prefix="/api/v1/tickets",
+    tags=["tickets"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 class StatusUpdate(BaseModel):

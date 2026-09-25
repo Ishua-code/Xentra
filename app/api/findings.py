@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.repository import FindingRepository
 from app.db.session import get_session
 from app.models.finding import UnifiedFinding
+from app.core.security import get_current_user
 
 router = APIRouter(prefix="/api/v1/findings", tags=["findings"])
 
