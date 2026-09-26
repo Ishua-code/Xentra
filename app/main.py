@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.services.epss_service import EPSSService
 from app.models.identity import Identity
@@ -24,6 +25,15 @@ app = FastAPI(
     description="Threat Identity Fusion System — fuses vulnerability exploitability with identity risk.",
     version="0.1.0"
 )
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(tickets_router)
 app.include_router(findings_router)
 app.include_router(identities_router)
