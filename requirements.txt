@@ -30,3 +30,4 @@ bcrypt==3.2.2
 passlib==1.7.4
 python-jose==3.5.0
 python-multipart==0.0.32
+aiosqlite==0.22.1
