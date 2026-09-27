@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Activity,
   ArrowDownRight,
   ArrowUpRight,
   Bell,
   CalendarDays,
+  Check,
   CircleHelp,
   Download,
   FileText,
@@ -55,113 +56,26 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAuth } from "@/lib/auth";
-import api from "@/lib/api";
 
 // ---------------------------------------------------------------------------
-// Real API shapes (matching app/models/finding.py, ticket.py, identity.py)
+// Placeholder data. This will be replaced by real calls to
+// /api/v1/findings, /api/v1/identities, /api/v1/tickets and /api/v1/correlate
+// in a later pass -- for now this ports the mock UI's look and interactions.
 // ---------------------------------------------------------------------------
 
-interface ApiFinding {
-  cve_id: string;
-  host: string;
-  owner: string;
-  epss_score: number;
-  identity_exposure_score: number;
-  graph_proximity_score: number;
-  betweenness_centrality: number;
-  unified_risk_score: number;
-  hops_to_domain_admin: number | null;
-  attack_path: string[] | null;
-}
+const findings = [
+  { cve: "CVE-2021-44228", host: "192.168.1.10", owner: "admin_john", epss: "0.972", identity: 92, severity: "Critical", description: "Remote code execution in Log4j allows unauthenticated attackers to execute arbitrary code on affected servers." },
+  { cve: "CVE-2017-0144", host: "192.168.1.24", owner: "svc_backup", epss: "0.914", identity: 86, severity: "Critical", description: "SMBv1 remote code execution vulnerability with known ransomware exploitation." },
+  { cve: "CVE-2020-1472", host: "192.168.1.6", owner: "admin_john", epss: "0.742", identity: 79, severity: "High", description: "Zerologon elevation of privilege in Netlogon allows an attacker to impersonate a domain controller." },
+  { cve: "CVE-2018-7600", host: "192.168.1.31", owner: "sara_finance", epss: "0.681", identity: 64, severity: "High", description: "Drupalgeddon remote code execution affecting the public web tier." },
+  { cve: "CVE-2021-34527", host: "192.168.1.18", owner: "svc_print", epss: "0.574", identity: 58, severity: "High", description: "PrintNightmare allows remote code execution through the Windows Print Spooler." },
+  { cve: "CVE-2019-0708", host: "192.168.1.44", owner: "mike_ops", epss: "0.392", identity: 42, severity: "Medium", description: "BlueKeep remote desktop services vulnerability." },
+];
 
-interface ApiTicket {
-  ticket_id: string;
-  title: string;
-  severity: string;
-  cve_id: string;
-  host: string;
-  owner: string;
-  status: string;
-  recommended_actions: string[];
-  created_at: string;
-}
-
-interface ApiIdentity {
-  username: string;
-  privilege_level: string;
-  mfa_enabled: boolean;
-  last_login_days_ago: number;
-  owned_asset_ip: string;
-}
-
-// Display-ready finding, derived from the API response above.
-interface DisplayFinding {
-  cve: string;
-  host: string;
-  owner: string;
-  epss: string;
-  identity: number; // 0-100
-  severity: "Critical" | "High" | "Medium" | "Low";
-  description: string;
-  unifiedRiskScore: number; // 0-1
-  attackPath: string[] | null;
-  hopsToDomainAdmin: number | null;
-  ticket: ApiTicket | null;
-}
-
-// Reference descriptions for CVEs this project's sample data set is known to
-// include. This is static reference text, not something the API returns --
-// the backend has no description field on a finding.
-const CVE_DESCRIPTIONS: Record<string, string> = {
-  "CVE-2021-44228": "Remote code execution in Log4j allows unauthenticated attackers to execute arbitrary code on affected servers.",
-  "CVE-2017-0144": "SMBv1 remote code execution vulnerability with known ransomware exploitation.",
-  "CVE-2020-1472": "Zerologon elevation of privilege in Netlogon allows an attacker to impersonate a domain controller.",
-  "CVE-2018-7600": "Drupalgeddon remote code execution affecting the public web tier.",
-  "CVE-2021-34527": "PrintNightmare allows remote code execution through the Windows Print Spooler.",
-  "CVE-2019-0708": "BlueKeep remote desktop services vulnerability.",
-};
-
-// The backend gives a 0-1 unified_risk_score rather than a severity label,
-// so severity is derived here. Thresholds are a judgment call -- adjust to
-// match however your team defines these bands.
-function severityFromScore(score: number): DisplayFinding["severity"] {
-  if (score >= 0.7) return "Critical";
-  if (score >= 0.5) return "High";
-  if (score >= 0.3) return "Medium";
-  return "Low";
-}
-
-function toDisplayFinding(f: ApiFinding, ticketsByCve: Map<string, ApiTicket>): DisplayFinding {
-  return {
-    cve: f.cve_id,
-    host: f.host,
-    owner: f.owner,
-    epss: f.epss_score.toFixed(3),
-    identity: Math.round(f.identity_exposure_score * 100),
-    severity: severityFromScore(f.unified_risk_score),
-    description: CVE_DESCRIPTIONS[f.cve_id] ?? "No description available for this CVE yet.",
-    unifiedRiskScore: f.unified_risk_score,
-    attackPath: f.attack_path,
-    hopsToDomainAdmin: f.hops_to_domain_admin,
-    ticket: ticketsByCve.get(f.cve_id) ?? null,
-  };
-}
-
-// Placeholder data for the two dashboard sections that have no backing
-// endpoint yet (there is no GET /assets and no historical trend endpoint).
-// Clearly labeled "Demo data" in the UI rather than presented as live.
-const demoTrend = Array.from({ length: 30 }, (_, i) => ({
+const trend = Array.from({ length: 30 }, (_, i) => ({
   day: i + 1,
   score: Math.round(82 - i * 0.34 + Math.sin(i / 2) * 2),
 }));
-
-const demoAssets = [
-  { host: "dc-prod-01", criticality: "Critical", team: "Infrastructure", findings: 12 },
-  { host: "payments-api-03", criticality: "Critical", team: "Payments", findings: 8 },
-  { host: "finance-laptop-44", criticality: "High", team: "Finance IT", findings: 5 },
-  { host: "legacy-web-02", criticality: "Medium", team: "Platform", findings: 3 },
-  { host: "backup-node-07", criticality: "High", team: "Infrastructure", findings: 7 },
-];
 
 const alerts = [
   "Critical finding crossed EPSS threshold",
@@ -170,6 +84,14 @@ const alerts = [
   "MFA policy drift detected in Finance",
   "Finding CVE-2019-0708 resolved",
   "New identity added to privileged group",
+];
+
+const assets = [
+  { host: "dc-prod-01", criticality: "Critical", team: "Infrastructure", findings: 12 },
+  { host: "payments-api-03", criticality: "Critical", team: "Payments", findings: 8 },
+  { host: "finance-laptop-44", criticality: "High", team: "Finance IT", findings: 5 },
+  { host: "legacy-web-02", criticality: "Medium", team: "Platform", findings: 3 },
+  { host: "backup-node-07", criticality: "High", team: "Infrastructure", findings: 7 },
 ];
 
 const navItems = [
@@ -181,71 +103,14 @@ const navItems = [
   { label: "Reports", icon: FileText },
 ];
 
+const identities = [
+  { name: "admin_john", risk: 96 },
+  { name: "svc_backup", risk: 84 },
+  { name: "sara_finance", risk: 61 },
+];
+
 function severityClass(s: string) {
   return `severity-${s.toLowerCase()}`;
-}
-
-// ---------------------------------------------------------------------------
-// Data hook: fetches findings, tickets and identities together
-// ---------------------------------------------------------------------------
-
-function useDashboardData() {
-  const [findings, setFindings] = useState<DisplayFinding[]>([]);
-  const [identityRisk, setIdentityRisk] = useState<{ name: string; risk: number }[]>([]);
-  const [identityCount, setIdentityCount] = useState(0);
-  const [openTickets, setOpenTickets] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      try {
-        const [findingsRes, ticketsRes, identitiesRes] = await Promise.all([
-          api.get<ApiFinding[]>("/api/v1/findings"),
-          api.get<ApiTicket[]>("/api/v1/tickets"),
-          api.get<ApiIdentity[]>("/api/v1/identities"),
-        ]);
-        if (cancelled) return;
-
-        const ticketsByCve = new Map(ticketsRes.data.map((t) => [t.cve_id, t]));
-        const displayFindings = findingsRes.data
-          .map((f) => toDisplayFinding(f, ticketsByCve))
-          .sort((a, b) => b.unifiedRiskScore - a.unifiedRiskScore);
-
-        // "Top risky identities" has no direct backend field for a risk
-        // number, so it's derived here from the highest identity exposure
-        // score seen across that owner's findings.
-        const riskByOwner = new Map<string, number>();
-        for (const f of findingsRes.data) {
-          const current = riskByOwner.get(f.owner) ?? 0;
-          riskByOwner.set(f.owner, Math.max(current, Math.round(f.identity_exposure_score * 100)));
-        }
-        const topIdentities = [...riskByOwner.entries()]
-          .map(([name, risk]) => ({ name, risk }))
-          .sort((a, b) => b.risk - a.risk)
-          .slice(0, 3);
-
-        setFindings(displayFindings);
-        setIdentityRisk(topIdentities);
-        setIdentityCount(identitiesRes.data.length);
-        setOpenTickets(ticketsRes.data.filter((t) => t.status === "Open").length);
-        setError(null);
-      } catch {
-        if (!cancelled) setError("Could not load live data from the backend.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  return { findings, identityRisk, identityCount, openTickets, loading, error };
 }
 
 // ---------------------------------------------------------------------------
@@ -285,40 +150,31 @@ function Sparkline({
   );
 }
 
-function RiskRing({ score }: { score: number }) {
-  const label = score >= 70 ? "HIGH RISK" : score >= 40 ? "MODERATE RISK" : "LOW RISK";
+function RiskRing() {
   return (
     <div className="risk-ring">
       <div>
-        <strong>{score}</strong>
+        <strong>72</strong>
         <span>/100</span>
-        <small>{label}</small>
+        <small>MODERATE RISK</small>
       </div>
     </div>
   );
 }
 
-function AttackPath({ path }: { path: string[] | null }) {
-  if (!path || path.length === 0) {
-    return (
-      <div className="attack-graph attack-graph-large flex items-center justify-center text-sm text-slate-500">
-        No attack path recorded for this finding.
-      </div>
-    );
-  }
-
-  const nodeCount = path.length;
-  const nodes = path.map((label, i) => {
-    const left = `${8 + (i * 84) / Math.max(nodeCount - 1, 1)}%`;
-    const top = i % 2 === 0 ? "45%" : "20%";
-    const kind = i === 0 ? "node-user" : i === nodeCount - 1 ? "node-domain" : "node-pivot";
-    return [kind, label, left, top] as const;
-  });
-
+function AttackPath() {
+  const nodes: [string, string, string, string][] = [
+    ["node-user", "weak_user", "10%", "48%"],
+    ["node-user", "svc_backup", "28%", "18%"],
+    ["node-pivot", "admin_pivot", "39%", "45%"],
+    ["node-server", "payments-api", "57%", "70%"],
+    ["node-domain", "DOMAIN_ADMIN", "87%", "34%"],
+  ];
   return (
     <div className="attack-graph attack-graph-large">
       <svg className="attack-lines" viewBox="0 0 760 300" preserveAspectRatio="none">
         <path d="M80 170 C180 60 220 80 310 145 S430 240 520 130 S630 70 700 115" />
+        <path d="M310 145 C350 80 410 70 470 100" />
       </svg>
       {nodes.map(([kind, label, left, top]) => (
         <div key={label}>
@@ -368,13 +224,11 @@ function Sidebar({
   setActive,
   sidebarOpen,
   setSidebarOpen,
-  findingsCount,
 }: {
   active: string;
   setActive: (label: string) => void;
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
-  findingsCount: number;
 }) {
   const { username, logout } = useAuth();
   const initials = username ? username.slice(0, 2).toUpperCase() : "??";
@@ -402,9 +256,7 @@ function Sidebar({
           >
             <Icon />
             {label}
-            {label === "Vulnerabilities" && (
-              <span className="ml-auto text-[9px] text-slate-600">{findingsCount}</span>
-            )}
+            {label === "Assets" && <span className="ml-auto text-[9px] text-slate-600">248</span>}
           </button>
         ))}
         <p className="eyebrow px-3 pb-2 pt-6">System</p>
@@ -503,27 +355,17 @@ function PageIntro({ title, subtitle }: { title: string; subtitle: string }) {
   );
 }
 
-function DemoBadge({ label = "DEMO DATA" }: { label?: string }) {
-  return <span className="ml-2 rounded bg-slate-800 px-1.5 py-0.5 text-[9px] tracking-wide text-slate-400">{label}</span>;
-}
-
 function AssetTable() {
   return (
     <Card className="dashboard-card">
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle>
-            Asset inventory
-            <DemoBadge />
-          </CardTitle>
+          <CardTitle>Asset inventory</CardTitle>
           <AppButton variant="default">
             <Plus data-icon="inline-start" />
             Add asset
           </AppButton>
         </div>
-        <p className="mt-1 text-[11px] text-slate-500">
-          There is no /api/v1/assets endpoint yet -- this table shows placeholder data until one exists.
-        </p>
       </CardHeader>
       <CardContent className="p-0">
         <Table>
@@ -537,7 +379,7 @@ function AssetTable() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {demoAssets.map((a) => (
+            {assets.map((a) => (
               <TableRow key={a.host}>
                 <TableCell className="font-mono text-xs text-blue-300">{a.host}</TableCell>
                 <TableCell>
@@ -568,20 +410,12 @@ function Reports() {
               <div className="report-icon">
                 <FileText />
               </div>
-              <h3 className="mt-4 text-sm font-semibold text-white">
-                {r}
-                <DemoBadge label="COMING SOON" />
-              </h3>
-              <p className="mt-1 text-xs text-slate-500">PDF · Report generation not built yet</p>
-              <Button
-                disabled
-                size="sm"
-                title="Report generation isn't built yet -- there's no backend endpoint for this."
-                className="cursor-not-allowed border-slate-800 bg-transparent text-slate-600 opacity-60"
-              >
+              <h3 className="mt-4 text-sm font-semibold text-white">{r}</h3>
+              <p className="mt-1 text-xs text-slate-500">PDF · Updated today</p>
+              <AppButton>
                 <Download data-icon="inline-start" />
                 Generate report
-              </Button>
+              </AppButton>
             </CardContent>
           </Card>
         ))}
@@ -617,7 +451,13 @@ function SettingsPage() {
   );
 }
 
-function DetailPanel({ finding, onClose }: { finding: DisplayFinding; onClose: () => void }) {
+function DetailPanel({
+  finding,
+  onClose,
+}: {
+  finding: (typeof findings)[number];
+  onClose: () => void;
+}) {
   return (
     <div className="detail-overlay" onClick={onClose}>
       <aside className="detail-panel" onClick={(e) => e.stopPropagation()}>
@@ -634,8 +474,8 @@ function DetailPanel({ finding, onClose }: { finding: DisplayFinding; onClose: (
         <p className="mt-4 text-sm leading-6 text-slate-300">{finding.description}</p>
         <div className="detail-stats">
           <div>
-            <span>Unified risk</span>
-            <strong>{Math.round(finding.unifiedRiskScore * 100)}</strong>
+            <span>CVSS</span>
+            <strong>9.8</strong>
           </div>
           <div>
             <span>EPSS</span>
@@ -647,30 +487,13 @@ function DetailPanel({ finding, onClose }: { finding: DisplayFinding; onClose: (
           </div>
         </div>
         <h3 className="detail-heading">Attack path chain</h3>
-        {finding.attackPath && finding.attackPath.length > 0 ? (
-          <div className="chain">
-            {finding.attackPath.map((step, i) => (
-              <span key={step} style={{ display: "contents" }}>
-                <span>{step}</span>
-                {i < finding.attackPath!.length - 1 && <b>-&gt;</b>}
-              </span>
-            ))}
-          </div>
-        ) : (
-          <p className="text-xs text-slate-500">No attack path recorded for this finding.</p>
-        )}
-        <h3 className="detail-heading">Ticket status</h3>
-        {finding.ticket ? (
-          <p className="text-sm text-slate-300">
-            <span className="font-mono text-blue-300">{finding.ticket.ticket_id}</span> -- {finding.ticket.status}
-          </p>
-        ) : (
-          <p className="text-xs text-slate-500">
-            No ticket exists for this finding yet. Tickets are currently only created in bulk by
-            <code className="mx-1 rounded bg-slate-800 px-1">POST /api/v1/correlate</code>
-            -- there is no endpoint yet to create one for a single finding.
-          </p>
-        )}
+        <div className="chain">
+          <span>weak_user</span>
+          <b>-&gt;</b>
+          <span>admin_pivot</span>
+          <b>-&gt;</b>
+          <span>DOMAIN_ADMIN</span>
+        </div>
         <h3 className="detail-heading">Remediation</h3>
         <label>
           Assign owner
@@ -679,21 +502,26 @@ function DetailPanel({ finding, onClose }: { finding: DisplayFinding; onClose: (
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={finding.owner}>{finding.owner}</SelectItem>
+              <SelectItem value="admin_john">admin_john</SelectItem>
+              <SelectItem value="sara_finance">sara_finance</SelectItem>
+              <SelectItem value="mike_ops">mike_ops</SelectItem>
             </SelectContent>
           </Select>
         </label>
         <label>
+          Due date
+          <Input type="date" defaultValue="2026-10-02" />
+        </label>
+        <label>
           Status
-          <Select defaultValue={finding.ticket?.status ?? "none"}>
+          <Select defaultValue="open">
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="none">No ticket</SelectItem>
-              <SelectItem value="Open">Open</SelectItem>
-              <SelectItem value="In Progress">In Progress</SelectItem>
-              <SelectItem value="Resolved">Resolved</SelectItem>
+              <SelectItem value="open">Open</SelectItem>
+              <SelectItem value="progress">In progress</SelectItem>
+              <SelectItem value="resolved">Resolved</SelectItem>
             </SelectContent>
           </Select>
         </label>
@@ -711,11 +539,9 @@ function OverviewContent({
   filterOpen,
   setFilterOpen,
   filtered,
+  ticketed,
+  createTicket,
   setSelected,
-  identityRisk,
-  identityCount,
-  openTickets,
-  riskScore,
 }: {
   tab: string;
   setTab: (t: string) => void;
@@ -723,12 +549,10 @@ function OverviewContent({
   setQuery: (q: string) => void;
   filterOpen: boolean;
   setFilterOpen: (o: boolean) => void;
-  filtered: DisplayFinding[];
-  setSelected: (f: DisplayFinding | null) => void;
-  identityRisk: { name: string; risk: number }[];
-  identityCount: number;
-  openTickets: number;
-  riskScore: number;
+  filtered: typeof findings;
+  ticketed: string[];
+  createTicket: (cve: string) => void;
+  setSelected: (f: (typeof findings)[number] | null) => void;
 }) {
   return (
     <div className="dashboard-content">
@@ -738,7 +562,7 @@ function OverviewContent({
           <h2 className="mt-1 text-xl font-semibold text-white">Good morning</h2>
         </div>
         <p className="hidden text-[11px] text-slate-500 sm:block">
-          Last sync <span className="text-slate-300">just now</span>
+          Last sync <span className="text-slate-300">2 min ago</span>
         </p>
       </div>
 
@@ -747,29 +571,31 @@ function OverviewContent({
           <Card className="dashboard-card pulse-main">
             <CardContent className="flex flex-col items-center p-4">
               <p className="eyebrow self-start">Risk pulse</p>
-              <RiskRing score={riskScore} />
+              <RiskRing />
               <p className="mt-1 text-center text-[10px] leading-4 text-slate-500">
-                Based on {filtered.length} correlated finding{filtered.length === 1 ? "" : "s"}.
+                Posture is improving
+                <br />
+                but 3 critical paths remain.
               </p>
             </CardContent>
           </Card>
           {(
             [
-              ["Vulnerabilities", String(filtered.length), "#60a5fa"],
-              ["Identities", String(identityCount), "#a78bfa"],
-              ["Open incidents", String(openTickets).padStart(2, "0"), "#fbbf24"],
+              ["Vulnerabilities", "1,284", "+12.5%", "#60a5fa"],
+              ["Identities", "8,492", "+4.8%", "#a78bfa"],
+              ["Open incidents", "07", "+2", "#fbbf24"],
             ] as const
-          ).map(([label, value, color], i) => (
+          ).map(([label, value, delta, color], i) => (
             <div className="pulse-row" key={label}>
               <div>
                 <p className="text-[10px] uppercase tracking-wider text-slate-500">{label}</p>
                 <strong>{value}</strong>
                 <span className={i === 0 ? "text-red-400" : "text-emerald-400"}>
                   {i === 0 ? <ArrowUpRight /> : <ArrowDownRight />}
-                  live
+                  {delta}
                 </span>
               </div>
-              <Sparkline color={color} />
+              <Sparkline color={color} points={i === 1 ? [6, 5, 8, 7, 11, 10, 14] : undefined} />
             </div>
           ))}
         </aside>
@@ -844,33 +670,25 @@ function OverviewContent({
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filtered.length === 0 ? (
-                        <TableRow>
-                          <TableCell className="p-6 text-center text-sm text-slate-500">
-                            No findings match. Run a correlation to populate this table.
+                      {filtered.map((f) => (
+                        <TableRow key={f.cve} className="cursor-pointer" onClick={() => setSelected(f)}>
+                          <TableCell className="font-mono text-xs text-blue-300">{f.cve}</TableCell>
+                          <TableCell className="font-mono text-xs text-slate-400">{f.host}</TableCell>
+                          <TableCell className="text-xs">{f.owner}</TableCell>
+                          <TableCell className="font-mono text-xs">{f.epss}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <div className="risk-track">
+                                <span style={{ width: `${f.identity}%` }} />
+                              </div>
+                              <span className="text-xs">{f.identity}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={severityClass(f.severity)}>{f.severity}</Badge>
                           </TableCell>
                         </TableRow>
-                      ) : (
-                        filtered.map((f) => (
-                          <TableRow key={f.cve} className="cursor-pointer" onClick={() => setSelected(f)}>
-                            <TableCell className="font-mono text-xs text-blue-300">{f.cve}</TableCell>
-                            <TableCell className="font-mono text-xs text-slate-400">{f.host}</TableCell>
-                            <TableCell className="text-xs">{f.owner}</TableCell>
-                            <TableCell className="font-mono text-xs">{f.epss}</TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <div className="risk-track">
-                                  <span style={{ width: `${f.identity}%` }} />
-                                </div>
-                                <span className="text-xs">{f.identity}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <Badge className={severityClass(f.severity)}>{f.severity}</Badge>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      )}
+                      ))}
                     </TableBody>
                   </Table>
                 </div>
@@ -882,14 +700,10 @@ function OverviewContent({
             <Card className="dashboard-card tab-panel">
               <CardHeader>
                 <CardTitle>Privilege escalation graph</CardTitle>
-                <p className="text-xs text-slate-500">
-                  {filtered[0]
-                    ? `Highest risk finding · ${filtered[0].cve} · ${filtered[0].hopsToDomainAdmin ?? "?"} hops to domain admin`
-                    : "No findings to graph yet."}
-                </p>
+                <p className="text-xs text-slate-500">Highest confidence route · 5 nodes · 3 hops to domain admin</p>
               </CardHeader>
               <CardContent>
-                <AttackPath path={filtered[0]?.attackPath ?? null} />
+                <AttackPath />
               </CardContent>
             </Card>
           )}
@@ -899,18 +713,13 @@ function OverviewContent({
           {tab === "Trends" && (
             <Card className="dashboard-card tab-panel">
               <CardHeader>
-                <CardTitle>
-                  Risk score trend
-                  <DemoBadge />
-                </CardTitle>
-                <p className="text-xs text-slate-500">
-                  There is no historical time-series endpoint yet -- this chart is placeholder data.
-                </p>
+                <CardTitle>Risk score trend</CardTitle>
+                <p className="text-xs text-slate-500">30 day unified posture score · lower is better</p>
               </CardHeader>
               <CardContent>
                 <div className="h-[380px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={demoTrend}>
+                    <LineChart data={trend}>
                       <XAxis dataKey="day" tick={{ fill: "#64748b", fontSize: 10 }} tickLine={false} axisLine={false} />
                       <YAxis domain={[60, 90]} tick={{ fill: "#64748b", fontSize: 10 }} tickLine={false} axisLine={false} />
                       <Tooltip contentStyle={{ background: "#111827", border: "1px solid #263247", fontSize: 11 }} />
@@ -929,30 +738,32 @@ function OverviewContent({
               <CardTitle>Needs your attention</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-2">
-              {filtered.slice(0, 3).map((f) => (
+              {findings.slice(0, 3).map((f) => (
                 <div className="attention-item" key={f.cve}>
                   <div className="flex items-center justify-between gap-2">
                     <Badge className={severityClass(f.severity)}>{f.severity}</Badge>
                     <span className="font-mono text-[10px] text-blue-300">{f.cve}</span>
                   </div>
                   <p>{f.description.slice(0, 58)}...</p>
-                  {f.ticket ? (
-                    <span className="ticket-link">
-                      <span className="font-mono">{f.ticket.ticket_id}</span> · {f.ticket.status}
-                    </span>
-                  ) : (
-                    <span className="ticket-link text-slate-500">No ticket yet</span>
-                  )}
+                  <button onClick={() => createTicket(f.cve)} className="ticket-link">
+                    {ticketed.includes(f.cve) ? (
+                      <>
+                        <Check /> Ticket created
+                      </>
+                    ) : (
+                      <>
+                        <Plus /> Create ticket
+                      </>
+                    )}
+                  </button>
                 </div>
               ))}
-              {filtered.length === 0 && <p className="text-xs text-slate-500">Nothing needs attention right now.</p>}
             </CardContent>
           </Card>
 
           <Card className="dashboard-card">
             <CardHeader className="pb-2">
               <CardTitle>Recent activity</CardTitle>
-              <DemoBadge />
             </CardHeader>
             <CardContent className="activity-feed">
               {[
@@ -978,8 +789,7 @@ function OverviewContent({
               <CardTitle>Top risky identities</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
-              {identityRisk.length === 0 && <p className="text-xs text-slate-500">No identity data yet.</p>}
-              {identityRisk.map((id) => (
+              {identities.map((id) => (
                 <div key={id.name}>
                   <div className="flex justify-between text-[11px]">
                     <span>{id.name}</span>
@@ -1009,49 +819,27 @@ export default function Page() {
   const [active, setActive] = useState("Overview");
   const [tab, setTab] = useState("Findings");
   const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<DisplayFinding | null>(null);
+  const [selected, setSelected] = useState<(typeof findings)[number] | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [alertsOpen, setAlertsOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  const { findings, identityRisk, identityCount, openTickets, loading, error } = useDashboardData();
+  const [ticketed, setTicketed] = useState<string[]>([]);
 
   const filtered = useMemo(
-    () =>
-      findings.filter((f) =>
-        [f.cve, f.host, f.owner, f.severity].join(" ").toLowerCase().includes(query.toLowerCase())
-      ),
-    [findings, query]
+    () => findings.filter((f) => Object.values(f).join(" ").toLowerCase().includes(query.toLowerCase())),
+    [query]
   );
 
-  const riskScore = findings.length
-    ? Math.round((findings.reduce((sum, f) => sum + f.unifiedRiskScore, 0) / findings.length) * 100)
-    : 0;
+  const createTicket = (cve: string) => setTicketed((t) => [...new Set([...t, cve])]);
 
   return (
     <div className="min-h-screen bg-[#080c14] text-slate-200">
-      <Sidebar
-        active={active}
-        setActive={setActive}
-        sidebarOpen={sidebarOpen}
-        setSidebarOpen={setSidebarOpen}
-        findingsCount={findings.length}
-      />
+      <Sidebar active={active} setActive={setActive} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
       <main className="lg:pl-[224px]">
         <TopBar active={active} alertsOpen={alertsOpen} setAlertsOpen={setAlertsOpen} setSidebarOpen={setSidebarOpen} />
 
-        {loading ? (
-          <div className="dashboard-content">
-            <p className="text-sm text-slate-500">Loading live data from the backend...</p>
-          </div>
-        ) : error ? (
-          <div className="dashboard-content">
-            <Card className="dashboard-card">
-              <CardContent className="p-6 text-sm text-red-400">{error}</CardContent>
-            </Card>
-          </div>
-        ) : active === "Overview" ? (
+        {active === "Overview" ? (
           <OverviewContent
             tab={tab}
             setTab={setTab}
@@ -1060,11 +848,9 @@ export default function Page() {
             filterOpen={filterOpen}
             setFilterOpen={setFilterOpen}
             filtered={filtered}
+            ticketed={ticketed}
+            createTicket={createTicket}
             setSelected={setSelected}
-            identityRisk={identityRisk}
-            identityCount={identityCount}
-            openTickets={openTickets}
-            riskScore={riskScore}
           />
         ) : active === "Assets" ? (
           <div className="dashboard-content">
