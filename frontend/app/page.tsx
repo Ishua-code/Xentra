@@ -604,11 +604,21 @@ function SettingsPage() {
               <div className="flex items-center gap-3">
                 <div className="integration-logo">{x[0]}</div>
                 <div>
-                  <p className="text-sm font-semibold text-white">{x}</p>
+                  <p className="text-sm font-semibold text-white">
+                    {x}
+                    <DemoBadge label="NOT CONNECTED" />
+                  </p>
                   <p className="text-[10px] text-slate-500">Incident routing and alerts</p>
                 </div>
               </div>
-              <AppButton>Connect</AppButton>
+              <Button
+                disabled
+                size="sm"
+                title="Integrations aren't wired up yet -- there's no backend endpoint for this."
+                className="cursor-not-allowed border-slate-700 bg-transparent text-slate-600 opacity-60"
+              >
+                Connect
+              </Button>
             </div>
           ))}
         </CardContent>
@@ -1077,10 +1087,10 @@ export default function Page() {
           <SettingsPage />
         ) : (
           <div className="dashboard-content">
-            <PageIntro title={active} subtitle="Workspace view is ready for analyst workflows." />
+            <PageIntro title={active} subtitle="This section is not built yet." />
             <Card className="dashboard-card">
               <CardContent className="p-8 text-sm text-slate-400">
-                Select Overview, Assets, Reports, or Settings to explore the live reference interactions.
+                {active} isn't wired up to a backend endpoint yet -- this page is a placeholder until that work is done.
               </CardContent>
             </Card>
           </div>
