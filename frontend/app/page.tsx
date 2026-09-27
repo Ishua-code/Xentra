@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Activity,
   ArrowDownRight,
@@ -1012,11 +1013,18 @@ function OverviewContent({
 }
 
 // ---------------------------------------------------------------------------
-// Page
+// Page (URL-based tab so refresh keeps you on the same section)
 // ---------------------------------------------------------------------------
 
-export default function Page() {
-  const [active, setActive] = useState("Overview");
+function DashboardPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const active = searchParams.get("tab") || "Overview";
+
+  const setActive = (label: string) => {
+    router.push(`?tab=${encodeURIComponent(label)}`, { scroll: false });
+  };
+
   const [tab, setTab] = useState("Findings");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<DisplayFinding | null>(null);
@@ -1099,5 +1107,13 @@ export default function Page() {
 
       {selected && <DetailPanel finding={selected} onClose={() => setSelected(null)} />}
     </div>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#080c14]" />}>
+      <DashboardPage />
+    </Suspense>
   );
 }
