@@ -95,24 +95,20 @@ interface ApiIdentity {
   owned_asset_ip: string;
 }
 
-// Display-ready finding, derived from the API response above.
 interface DisplayFinding {
   cve: string;
   host: string;
   owner: string;
   epss: string;
-  identity: number; // 0-100
+  identity: number;
   severity: "Critical" | "High" | "Medium" | "Low";
   description: string;
-  unifiedRiskScore: number; // 0-1
+  unifiedRiskScore: number;
   attackPath: string[] | null;
   hopsToDomainAdmin: number | null;
   ticket: ApiTicket | null;
 }
 
-// Reference descriptions for CVEs this project's sample data set is known to
-// include. This is static reference text, not something the API returns --
-// the backend has no description field on a finding.
 const CVE_DESCRIPTIONS: Record<string, string> = {
   "CVE-2021-44228": "Remote code execution in Log4j allows unauthenticated attackers to execute arbitrary code on affected servers.",
   "CVE-2017-0144": "SMBv1 remote code execution vulnerability with known ransomware exploitation.",
@@ -122,9 +118,6 @@ const CVE_DESCRIPTIONS: Record<string, string> = {
   "CVE-2019-0708": "BlueKeep remote desktop services vulnerability.",
 };
 
-// The backend gives a 0-1 unified_risk_score rather than a severity label,
-// so severity is derived here. Thresholds are a judgment call -- adjust to
-// match however your team defines these bands.
 function severityFromScore(score: number): DisplayFinding["severity"] {
   if (score >= 0.7) return "Critical";
   if (score >= 0.5) return "High";
@@ -148,9 +141,6 @@ function toDisplayFinding(f: ApiFinding, ticketsByCve: Map<string, ApiTicket>): 
   };
 }
 
-// Placeholder data for the two dashboard sections that have no backing
-// endpoint yet (there is no GET /assets and no historical trend endpoint).
-// Clearly labeled "Demo data" in the UI rather than presented as live.
 const demoTrend = Array.from({ length: 30 }, (_, i) => ({
   day: i + 1,
   score: Math.round(82 - i * 0.34 + Math.sin(i / 2) * 2),
@@ -186,10 +176,6 @@ function severityClass(s: string) {
   return `severity-${s.toLowerCase()}`;
 }
 
-// ---------------------------------------------------------------------------
-// Data hook: fetches findings, tickets and identities together
-// ---------------------------------------------------------------------------
-
 function useDashboardData() {
   const [findings, setFindings] = useState<DisplayFinding[]>([]);
   const [identityRisk, setIdentityRisk] = useState<{ name: string; risk: number }[]>([]);
@@ -215,9 +201,6 @@ function useDashboardData() {
           .map((f) => toDisplayFinding(f, ticketsByCve))
           .sort((a, b) => b.unifiedRiskScore - a.unifiedRiskScore);
 
-        // "Top risky identities" has no direct backend field for a risk
-        // number, so it's derived here from the highest identity exposure
-        // score seen across that owner's findings.
         const riskByOwner = new Map<string, number>();
         for (const f of findingsRes.data) {
           const current = riskByOwner.get(f.owner) ?? 0;
@@ -248,10 +231,6 @@ function useDashboardData() {
 
   return { findings, identityRisk, identityCount, openTickets, loading, error };
 }
-
-// ---------------------------------------------------------------------------
-// Small shared visual pieces
-// ---------------------------------------------------------------------------
 
 function Logo() {
   return (
@@ -359,10 +338,6 @@ function AppButton({
     </Button>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Sidebar + top bar (wired to real auth)
-// ---------------------------------------------------------------------------
 
 function Sidebar({
   active,
@@ -489,10 +464,6 @@ function TopBar({
     </header>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Page-level sections
-// ---------------------------------------------------------------------------
 
 function PageIntro({ title, subtitle }: { title: string; subtitle: string }) {
   return (
@@ -710,6 +681,133 @@ function DetailPanel({ finding, onClose }: { finding: DisplayFinding; onClose: (
         </label>
         <AppButton variant="default">Save remediation</AppButton>
       </aside>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// NEW: real Vulnerabilities page, wired to /api/v1/findings (via `findings`
+// already fetched by useDashboardData -- no new API call needed)
+// ---------------------------------------------------------------------------
+
+function VulnerabilitiesContent({
+  findings,
+  setSelected,
+}: {
+  findings: DisplayFinding[];
+  setSelected: (f: DisplayFinding | null) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [severityFilter, setSeverityFilter] = useState("all");
+
+  const filtered = useMemo(
+    () =>
+      findings
+        .filter((f) => (severityFilter === "all" ? true : f.severity === severityFilter))
+        .filter((f) =>
+          [f.cve, f.host, f.owner].join(" ").toLowerCase().includes(query.toLowerCase())
+        ),
+    [findings, query, severityFilter]
+  );
+
+  const counts = useMemo(() => {
+    const c = { Critical: 0, High: 0, Medium: 0, Low: 0 };
+    for (const f of findings) c[f.severity]++;
+    return c;
+  }, [findings]);
+
+  return (
+    <div className="dashboard-content">
+      <PageIntro
+        title="Vulnerabilities"
+        subtitle="Every CVE correlated with exploitability (EPSS) and identity exposure, from live backend data."
+      />
+
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {(["Critical", "High", "Medium", "Low"] as const).map((sev) => (
+          <Card key={sev} className="dashboard-card">
+            <CardContent className="p-4">
+              <p className="text-[10px] uppercase tracking-wider text-slate-500">{sev}</p>
+              <strong className="text-xl text-white">{counts[sev]}</strong>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <Card className="dashboard-card overflow-hidden">
+        <CardHeader className="border-b border-slate-800/80 pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <CardTitle>All findings</CardTitle>
+              <p className="mt-1 text-[11px] text-slate-500">Click a row to inspect the full attack chain.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Select value={severityFilter} onValueChange={setSeverityFilter}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All severities</SelectItem>
+                  <SelectItem value="Critical">Critical</SelectItem>
+                  <SelectItem value="High">High</SelectItem>
+                  <SelectItem value="Medium">Medium</SelectItem>
+                  <SelectItem value="Low">Low</SelectItem>
+                </SelectContent>
+              </Select>
+              <div className="search-wrap table-search">
+                <Search />
+                <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search CVE, host, owner" />
+              </div>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>CVE ID</TableHead>
+                  <TableHead>Host</TableHead>
+                  <TableHead>Owner</TableHead>
+                  <TableHead>EPSS</TableHead>
+                  <TableHead>Unified risk</TableHead>
+                  <TableHead>Severity</TableHead>
+                  <TableHead>Ticket</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.length === 0 ? (
+                  <TableRow>
+                    <TableCell className="p-6 text-center text-sm text-slate-500">
+                      No vulnerabilities match your filters.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filtered.map((f) => (
+                    <TableRow key={f.cve} className="cursor-pointer" onClick={() => setSelected(f)}>
+                      <TableCell className="font-mono text-xs text-blue-300">{f.cve}</TableCell>
+                      <TableCell className="font-mono text-xs text-slate-400">{f.host}</TableCell>
+                      <TableCell className="text-xs">{f.owner}</TableCell>
+                      <TableCell className="font-mono text-xs">{f.epss}</TableCell>
+                      <TableCell className="font-mono text-xs">{Math.round(f.unifiedRiskScore * 100)}</TableCell>
+                      <TableCell>
+                        <Badge className={severityClass(f.severity)}>{f.severity}</Badge>
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {f.ticket ? (
+                          <span className="text-blue-300">{f.ticket.ticket_id}</span>
+                        ) : (
+                          <span className="text-slate-500">No ticket</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -1012,10 +1110,6 @@ function OverviewContent({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Page (URL-based tab so refresh keeps you on the same section)
-// ---------------------------------------------------------------------------
-
 function DashboardPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1084,6 +1178,8 @@ function DashboardPage() {
             openTickets={openTickets}
             riskScore={riskScore}
           />
+        ) : active === "Vulnerabilities" ? (
+          <VulnerabilitiesContent findings={findings} setSelected={setSelected} />
         ) : active === "Assets" ? (
           <div className="dashboard-content">
             <PageIntro title="Asset inventory" subtitle="Hosts, ownership, and exposure across production." />
