@@ -1,20 +1,43 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.services.epss_service import EPSSService
 from app.models.identity import Identity
 from app.services.identity_service import IdentityService
 from app.services.graph_service import GraphRiskService
+from app.services.ticket_service import TicketService
+from pydantic import BaseModel
 from app.models.vulnerability import Vulnerability
 from app.services.correlation_service import CorrelationService
-from pydantic import BaseModel
-
-
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.api.tickets import router as tickets_router
+from app.db.repository import TicketRepository
+from app.db.session import get_session
+from app.db.repository import FindingRepository, IdentityRepository, TicketRepository
+from app.api.findings import router as findings_router
+from app.api.identities import router as identities_router
+from app.api.auth import router as auth_router
+from app.core.security import get_current_user
 
 app = FastAPI(
     title=settings.app_name,
     description="Threat Identity Fusion System — fuses vulnerability exploitability with identity risk.",
     version="0.1.0"
 )
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(tickets_router)
+app.include_router(findings_router)
+app.include_router(identities_router)
+app.include_router(auth_router)
 
 
 @app.get("/health")
@@ -50,14 +73,25 @@ graph_service = GraphRiskService()
 def analyze_graph(identities: list[Identity]):
     return graph_service.analyze(identities)
 
-correlation_service = CorrelationService()
-
-
+ticket_service = TicketService()
 class CorrelationRequest(BaseModel):
     vulnerabilities: list[Vulnerability]
     identities: list[Identity]
 
 
+correlation_service = CorrelationService()
+
 @app.post("/api/v1/correlate")
-async def correlate(request: CorrelationRequest):
-    return await correlation_service.correlate(request.vulnerabilities, request.identities)
+async def correlate(
+    request: CorrelationRequest,
+    session: AsyncSession = Depends(get_session),
+    current_user: str = Depends(get_current_user),
+):
+    findings = await correlation_service.correlate(request.vulnerabilities, request.identities)
+    tickets = ticket_service.generate_tickets(findings)
+
+    await IdentityRepository(session).upsert_many(request.identities)
+    await FindingRepository(session).save_many(findings)
+    await TicketRepository(session).save_many(tickets)
+
+    return {"findings": findings, "tickets": tickets}

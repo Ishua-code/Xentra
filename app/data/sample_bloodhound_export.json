@@ -1,0 +1,11 @@
+{
+  "nodes": [
+    {"username": "admin_john", "type": "User", "privilege_level": "domain_admin", "owned_asset_ip": "192.168.1.10"},
+    {"username": "svc_backup", "type": "User", "privilege_level": "service_account", "owned_asset_ip": "192.168.1.20"},
+    {"username": "jane_doe", "type": "User", "privilege_level": "standard", "owned_asset_ip": "192.168.1.30"}
+  ],
+  "edges": [
+    {"source": "svc_backup", "target": "admin_john", "relationship": "AdminTo"},
+    {"source": "jane_doe", "target": "svc_backup", "relationship": "MemberOf"}
+  ]
+}
