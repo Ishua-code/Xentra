@@ -8,6 +8,7 @@ from app.db import models  # noqa: F401  (registers tables)
 from app.db.base import Base
 from app.db.session import get_session
 from app.main import app
+from app.core.security import get_current_user
 
 
 @pytest.fixture(autouse=True)
@@ -27,7 +28,11 @@ def session_factory(tmp_path):
         async with factory() as session:
             yield session
 
+    async def override_current_user():
+        return "admin"
+
     app.dependency_overrides[get_session] = override
+    app.dependency_overrides[get_current_user] = override_current_user
     yield factory
     app.dependency_overrides.clear()
     asyncio.run(engine.dispose())
