@@ -11,6 +11,7 @@ from app.db.models import FindingRow, IdentityRow, TicketRow
 from app.models.finding import UnifiedFinding
 from app.models.identity import Identity
 
+
 def _to_row(ticket: Ticket) -> TicketRow:
     data = ticket.model_dump(mode="json")
     data["created_at"] = datetime.fromisoformat(ticket.created_at)
@@ -31,7 +32,24 @@ class TicketRepository:
     async def save_many(self, tickets: Sequence[Ticket]) -> None:
         if not tickets:
             return
-        self.session.add_all([_to_row(t) for t in tickets])
+        for t in tickets:
+            existing = await self.session.execute(
+                select(TicketRow).where(
+                    TicketRow.cve_id == t.cve_id, TicketRow.host == t.host
+                )
+            )
+            row = existing.scalars().first()
+            if row is None:
+                self.session.add(_to_row(t))
+            else:
+                # keep ticket_id, status and created_at; refresh the scores
+                row.unified_risk_score = t.unified_risk_score
+                row.identity_exposure_score = t.identity_exposure_score
+                row.epss_score = t.epss_score
+                row.severity = t.severity
+                row.attack_path = t.attack_path or []
+                row.hops_to_domain_admin = t.hops_to_domain_admin
+                row.recommended_actions = t.recommended_actions
         await self.session.commit()
 
     async def list(
@@ -79,11 +97,21 @@ class FindingRepository:
     async def save_many(self, findings: Sequence[UnifiedFinding]) -> None:
         if not findings:
             return
-        rows = []
         for f in findings:
             data = f.model_dump(mode="json")
-            rows.append(FindingRow(id=str(uuid.uuid4()), created_at=_now(), **data))
-        self.session.add_all(rows)
+            existing = await self.session.execute(
+                select(FindingRow).where(
+                    FindingRow.cve_id == f.cve_id, FindingRow.host == f.host
+                )
+            )
+            row = existing.scalars().first()
+            if row is None:
+                self.session.add(
+                    FindingRow(id=str(uuid.uuid4()), created_at=_now(), **data)
+                )
+            else:
+                for k, v in data.items():
+                    setattr(row, k, v)
         await self.session.commit()
 
     async def list(

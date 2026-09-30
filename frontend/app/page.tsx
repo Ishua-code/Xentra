@@ -7,6 +7,7 @@ import TicketsTab from "@/components/TicketsTab";
 import AttackPathsTab from "@/components/AttackPathsTab";
 import AssetsTab from "@/components/AssetsTab";
 import ReportsTab from "@/components/ReportsTab";
+import ScanButton from "@/components/ScanButton";
 import {
   Activity,
   ArrowDownRight,
@@ -462,10 +463,7 @@ function TopBar({
             </div>
           )}
         </div>
-        <AppButton variant="default">
-          <Zap data-icon="inline-start" />
-          Run new scan
-        </AppButton>
+        <ScanButton />
       </div>
     </header>
   );
