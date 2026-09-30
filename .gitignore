@@ -1,3 +1,5 @@
 ﻿*.zip
 /Xentra/
 /xentra-overview-page/
+
+__pycache__/
