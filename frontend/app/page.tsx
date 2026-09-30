@@ -8,6 +8,7 @@ import AttackPathsTab from "@/components/AttackPathsTab";
 import AssetsTab from "@/components/AssetsTab";
 import ReportsTab from "@/components/ReportsTab";
 import ScanButton from "@/components/ScanButton";
+import SettingsTab from "@/components/SettingsTab";
 import {
   Activity,
   ArrowDownRight,
@@ -1204,8 +1205,10 @@ function DashboardPage() {
           <div className="dashboard-content">
             <ReportsTab />
           </div>
-        ) : active === "Settings" ? (
-          <SettingsPage />
+                ) : active === "Settings" ? (
+          <div className="dashboard-content">
+            <SettingsTab />
+          </div>
         ) : (
           <div className="dashboard-content">
             <PageIntro title={active} subtitle="This section is not built yet." />
