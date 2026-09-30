@@ -2,6 +2,11 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import IdentitiesTab from "@/components/IdentitiesTab";
+import TicketsTab from "@/components/TicketsTab";
+import AttackPathsTab from "@/components/AttackPathsTab";
+import AssetsTab from "@/components/AssetsTab";
+import ReportsTab from "@/components/ReportsTab";
 import {
   Activity,
   ArrowDownRight,
@@ -167,6 +172,7 @@ const navItems = [
   { label: "Overview", icon: LayoutDashboard },
   { label: "Vulnerabilities", icon: ShieldAlert },
   { label: "Identities", icon: Users },
+  { label: "Tickets", icon: FileText },
   { label: "Attack Paths", icon: Network },
   { label: "Assets", icon: GitBranch },
   { label: "Reports", icon: FileText },
@@ -1178,15 +1184,28 @@ function DashboardPage() {
             openTickets={openTickets}
             riskScore={riskScore}
           />
-        ) : active === "Vulnerabilities" ? (
+                ) : active === "Vulnerabilities" ? (
           <VulnerabilitiesContent findings={findings} setSelected={setSelected} />
-        ) : active === "Assets" ? (
+        ) : active === "Identities" ? (
           <div className="dashboard-content">
-            <PageIntro title="Asset inventory" subtitle="Hosts, ownership, and exposure across production." />
-            <AssetTable />
+            <IdentitiesTab />
           </div>
-        ) : active === "Reports" ? (
-          <Reports />
+                ) : active === "Tickets" ? (
+          <div className="dashboard-content">
+            <TicketsTab />
+          </div>
+        ) : active === "Attack Paths" ? (
+          <div className="dashboard-content">
+            <AttackPathsTab />
+          </div>
+                ) : active === "Assets" ? (
+          <div className="dashboard-content">
+            <AssetsTab />
+          </div>
+                ) : active === "Reports" ? (
+          <div className="dashboard-content">
+            <ReportsTab />
+          </div>
         ) : active === "Settings" ? (
           <SettingsPage />
         ) : (
